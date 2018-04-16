@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<job>
+  <runtime>
+    <description>Switches primary video and sound output before running an application given as command line argument, then restores the output afterwards.
+Note: additional command line arguments are not supported. If necessary, wrap the original command line in a batch script.</description>
+    <unnamed name="applicationExecutable" helpstring="path of application's executable" required="1"/>
+    <example>Example: OutputSwitcher.wsf "D:\path\to\application.exe"</example>
+  </runtime>
+  <!-- path to Display Changer II ( https://12noon.com/?page_id=641 ) -->
+  <resource id="videoSwitchHelper">%SystemRoot%\dc2.exe</resource>
+  <!-- path to Display Changer II configuration file -->
+  <resource id="videoConfiguration">%ProgramData%\dc2-hdtv.xml</resource>
+  <!-- path to NirCmd ( https://nirsoft.net/utils/nircmd.html ) -->
+  <resource id="audioSwitchHelper">%SystemRoot%\nircmd.exe</resource>
+  <!-- name of the sound playback device used when switching outputs -->
+  <resource id="audioDevice">HDTV</resource>
+  <!-- name of the sound playback device used when restoring outputs -->
+  <resource id="audioDeviceOriginal">Speakers</resource>
+  <!-- delay in ms applied after display output change and before display output restoration; minimum 2000 ms -->
+  <resource id="sleepMillis">2000</resource>
+
+  <resource id="messageConfirmation">Do you want to switch outputs before continuing?</resource>
+  <resource id="messageNotFound">Could not find '#name#': #path#.</resource>
+  <resource id="messageVideoConfiguration">DCII configuration</resource>
+  <resource id="messageSleepMillisInvalidTooSmall">Invalid 'sleepMillis' value, must be a number greater than or equals to #min#, got: #value#</resource>
+  <object id="shell" progid="WScript.Shell"/>
+  <object id="fso" progid="Scripting.FileSystemObject"/>
+  <script language="VBScript"><![CDATA[
+Function DisplayMessageBox(prompt, buttons, title)
+    DisplayMessageBox = MsgBox(prompt, buttons, title)
+End Function
+]]>
+  </script>
+  <script language="JScript"><![CDATA["use strict";
+var title = "OutputSwitcher";
+var videoSwitchHelperName = "Display Changer II";
+var audioSwitchHelperName = "NirCmd";
+var vbYesNoCancel = 3;
+var vbYes = 6;
+var vbNo = 7;
+var sleepMillisMin = 2000;
+var templateQuoted = '"#value#"';
+var templateKeyValue = "[#key#] #value#";
+var templateWhereCommandLine = shell.expandEnvironmentStrings('"%SystemRoot%\\System32\\WHERE.exe"') + " /F #pattern#";
+var templateVideoSwitchCommandLine = "#helper# -configure=#configuration# -temporary";
+var templateVideoRestoreCommandLine = "#helper# -restore";
+var templateAudioSwitchCommandLine = "#helper# setdefaultsounddevice #device#";
+
+function sanitizePathResource(path, name) {
+    var expandedPath = shell.expandEnvironmentStrings(path);
+    if (!fso.fileExists(expandedPath)) {
+        expandedPath = templateQuoted.replace("#value#", expandedPath);
+        var execution = shell.exec(templateWhereCommandLine.replace("#pattern#", expandedPath));
+        while (execution.status === 0) { WSH.sleep(10); }
+        if (execution.exitCode === 0) {
+            expandedPath = execution.stdOut.readLine();
+        } else {
+            throw new Error(2, getResource("messageNotFound").replace("#name#", name).replace("#path#", expandedPath));
+        }
+    } else {
+        expandedPath = templateQuoted.replace("#value#", expandedPath);
+    }
+    return expandedPath;
+}
+
+function sanitizeSleepMillis(value, min) {
+    var expandedValue = shell.expandEnvironmentStrings(value);
+    var sleepMillis = parseInt(expandedValue);
+    if (isNaN(sleepMillis) || sleepMillis < min) {
+        throw new Error(2, getResource("messageSleepMillisInvalidTooSmall").replace("#min#", min).replace("#value#", expandedValue));
+    }
+    return sleepMillis;
+}
+
+try {
+    var errorMessages = [];
+    var initResource = function(initializer, name) {
+        try {
+            return initializer();
+        } catch (e) {
+            if (e.number === 2 || e.number === -2146828283) {
+                errorMessages.push(templateKeyValue.replace("#key#", name).replace("#value#", e.number === -2146828283 ? getResource("messageNotFound").replace("#name#", "resource").replace("#path#", name) : e.message));
+            } else {
+                throw e;
+            }
+        }
+    };
+    var validUsage = WSH.arguments.named.length === 0 && WSH.arguments.unnamed.length === 1;
+    var applicationExecutable = WSH.arguments.unnamed.length !== 0 ? initResource(function() { return sanitizePathResource(WSH.arguments.unnamed.item(0), "applicationExecutable"); }, "applicationExecutable") : null;
+    var videoSwitchHelper = initResource(function() { return sanitizePathResource(getResource("videoSwitchHelper"), videoSwitchHelperName); }, "videoSwitchHelper");
+    var videoConfiguration = initResource(function() { return sanitizePathResource(getResource("videoConfiguration"), getResource("messageVideoConfiguration")); }, "videoConfiguration");
+    var audioSwitchHelper = initResource(function() { return sanitizePathResource(getResource("audioSwitchHelper"), audioSwitchHelperName); }, "audioSwitchHelper");
+    var audioDevice = initResource(function() { return templateQuoted.replace("#value#", getResource("audioDevice")); }, "audioDevice");
+    var audioDeviceOriginal = initResource(function() { return templateQuoted.replace("#value#", getResource("audioDeviceOriginal")); }, "audioDeviceOriginal");
+    var sleepMillis = initResource(function() { return sanitizeSleepMillis(getResource("sleepMillis"), sleepMillisMin); }, "sleepMillis");
+    if (!validUsage || errorMessages.length !== 0) {
+        throw new Error(!validUsage ? 1 : 2, errorMessages.length !== 0 ? errorMessages.join("\n") : "");
+    }
+    var prompt = getResource("messageConfirmation") + "\n"
+            + "\n"
+            + templateKeyValue.replace("#key#", "applicationExecutable").replace("#value#", applicationExecutable) + "\n"
+            + templateKeyValue.replace("#key#", "videoSwitchHelper").replace("#value#", videoSwitchHelper) + "\n"
+            + templateKeyValue.replace("#key#", "videoConfiguration").replace("#value#", videoConfiguration) + "\n"
+            + templateKeyValue.replace("#key#", "audioSwitchHelper").replace("#value#", audioSwitchHelper) + "\n"
+            + templateKeyValue.replace("#key#", "audioDevice").replace("#value#", audioDevice) + "\n"
+            + templateKeyValue.replace("#key#", "audioDeviceOriginal").replace("#value#", audioDeviceOriginal) + "\n"
+            + templateKeyValue.replace("#key#", "sleepMillis").replace("#value#", sleepMillis);
+    var answer = DisplayMessageBox(prompt, vbYesNoCancel, title);
+    if (answer === vbYes) {
+        shell.run(templateVideoSwitchCommandLine.replace("#helper#", videoSwitchHelper).replace("#configuration#", videoConfiguration), 1, true);
+        WSH.sleep(sleepMillis);
+        shell.run(templateAudioSwitchCommandLine.replace("#helper#", audioSwitchHelper).replace("#device#", audioDevice), 1, true);
+        shell.run(applicationExecutable, 1, true);
+        shell.run(templateAudioSwitchCommandLine.replace("#helper#", audioSwitchHelper).replace("#device#", audioDeviceOriginal), 1, true);
+        WSH.sleep(sleepMillis);
+        shell.run(templateVideoRestoreCommandLine.replace("#helper#", videoSwitchHelper));
+    } else if (answer === vbNo) {
+        shell.run(applicationExecutable);
+    }
+} catch (e) {
+    if (e.number === 1 || e.number === 2) {
+        if (e.message !== "") { WSH.echo(e.message); }
+        if (e.number === 1) { WSH.arguments.showUsage(); }
+    } else {
+        WSH.echo(templateKeyValue.replace("#key#", e.number).replace("#value#", e.message));
+    }
+    WSH.quit(e.number);
+}
+]]>
+  </script>
+</job>
