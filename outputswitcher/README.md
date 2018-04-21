@@ -22,22 +22,22 @@ Of course, you can switch back afterwards :smirk:
 4. Place a copy of **OutputSwitcher.wsf** somewhere, and adjust the resources in it.  
 They're commented and have sample values.  
 For files you can leave off the path part, iff the file is on the `PATH`.  
-(Optionally, you can localize some other message resources, the ones that starts with `message`, just don't touch the
+(Optionally, you can localize some other message resources, the ones that start with `message`, just don't touch the
 `#placeholders#` in them.)
 5. (Per game) If you have a game whose executable is `game1.exe`, you have to have a shortcut for it. Modify that
 shortcut's "Target" like this:  
 From: `X:\path\to\game1.exe`  
 To: `"%SystemRoot%\System32\wscript.exe" "Y:\path\to\OutputSwitcher.wsf" "X:\path\to\game1.exe"`
 
-You can now use this modified shortcut to launch the game, and before it actually launches, you're be asked whether you
+You can now use this modified shortcut to launch the game, and before it actually launches, you're asked whether you
 want to switch outputs or not. If you decide to switch, after exiting back to desktop, video output will be restored
 along with the previously configured audio playback device.
 
 ## Some more thoughts
 
-* The game has to have single "command" to launch (understandable by the OS shell) without any further command line
-arguments. If it's not the case, I recommend to wrap them in some sort of `.cmd` batch script using `START /WAIT ...`
-and use that script in the shortcut's Target instead of the game's executable.
+* The game has to have a single "command" to launch (understandable by the OS shell) without any further command line
+arguments. If it's not the case, I recommend to wrap the whole thing in some sort of `.cmd` batch script using
+`START /WAIT ...` and use that script in the shortcut's Target instead of the game's executable.
 * You have to adjust "normal" audio playback device in the script too, because **NirCmd** can't query the current one.
 * If for some reason you use more than one alternate configuration, you can just create another copy of the script,
 configure it, and use the copy in the shortcut's Target. I know it may be cumbersome, but it's enough for me :wink:
